@@ -1,5 +1,7 @@
 # OpenVPN client container for MikroTik ARMv7 and ARM64
 
+[English](README.md) | [Русский](README_RU.md)
+
 Minimal OpenVPN client gateway targeting RouterOS 7.24 containers. When the tunnel comes up, it reads IPv4 routes pushed by the OpenVPN server and creates matching RouterOS routes through the RouterOS REST API. When the tunnel goes down, it removes only routes bearing its ownership comment.
 
 Routes created using REST are static RouterOS records (`dynamic=false`). Their lifecycle is dynamic: the container reconciles them on every tunnel connect, reconnect, disconnect, and container startup.
