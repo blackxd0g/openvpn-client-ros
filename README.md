@@ -1,157 +1,447 @@
-# OpenVPN client container for MikroTik ARMv7 and ARM64
+**English** | [Русский](README_RU.md)
 
-[English](README.md) | [Русский](README_RU.md)
+# openvpn-client-ros
 
-Minimal OpenVPN client gateway targeting RouterOS 7.24 containers. When the tunnel comes up, it reads IPv4 routes pushed by the OpenVPN server and creates matching RouterOS routes through the RouterOS REST API. When the tunnel goes down, it removes only routes bearing its ownership comment.
+> Multi-architecture OpenVPN client for MikroTik RouterOS containers.
+> It receives routes pushed by the OpenVPN server, synchronizes RouterOS
+> `/ip/route` and firewall address lists through REST, and reconnects automatically.
 
-Routes created using REST are static RouterOS records (`dynamic=false`). Their lifecycle is dynamic: the container reconciles them on every tunnel connect, reconnect, disconnect, and container startup.
+[![Docker Image](https://img.shields.io/badge/Docker%20Hub-blackxdog%2Fopenvpn--client--ros-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/blackxdog/openvpn-client-ros)
+![Platforms](https://img.shields.io/badge/platform-armv7%20%7C%20arm64-success)
+![RouterOS](https://img.shields.io/badge/RouterOS-7.23%20%7C%207.24-blue)
 
-## Network model
+## ✨ Features
 
-```text
-LAN client -> RouterOS route -> 172.31.255.2 (container eth0)
-           -> container forwarding + masquerade -> tun0 -> VPN
-```
+- 📦 One `latest` tag for `linux/arm/v7` and `linux/arm64`.
+- ✅ Supports RB4011 (`arm`) and RB5009 (`arm64`).
+- 🔄 Automatic OpenVPN reconnection with reasons written to the log.
+- 🛣 Synchronizes pushed IPv4 networks with `/ip/route`.
+- 🧾 Synchronizes the same networks with `/ip/firewall/address-list`.
+- 🏷 Applies a container-specific ownership tag/comment.
+- ♻️ Idempotent reconciliation: valid records are left unchanged.
+- 🧹 Removes stale records and supports legacy ownership tags.
+- 🔐 RouterOS REST over HTTPS with a dedicated self-signed CA.
+- 🔒 File-based secrets keep passwords out of RouterOS container ENV logs.
+- 🚀 Automated installation with one RouterOS script.
+- 🪵 Logging levels: `error`, `warn`, `info`, and `debug`.
 
-The RouterOS route gateway is the container's veth address, not the remote tunnel gateway.
+> [!NOTE]
+> Tested on RouterOS 7.23 and 7.24. The `container` package and
+> `device-mode container=yes` are required.
 
-## Supported MikroTik families
+## ⚡ Quick start
 
-- RouterOS `arm64`, Docker platform `linux/arm64`: RB5009 and other ARM64 models.
-- RouterOS `arm`, Docker platform `linux/arm/v7`: RB4011 and other ARMv7 models.
-- ARMv5 is intentionally unsupported. This excludes devices that accept only ARM32v5 container images.
-- x86 and CHR images are not published by this project.
-
-RB4011 is reported by RouterOS as `arm`, not `arm64`, so it must use the `linux/arm/v7` manifest.
-
-## Build a multi-architecture image
-
-Build and push one tag containing ARMv7 and ARM64 manifests. RouterOS selects the matching manifest:
-
-```sh
-docker buildx build --pull --no-cache --platform linux/arm/v7,linux/arm64 -t YOUR_REGISTRY/mikrotik-openvpn-client:latest --push .
-```
-
-For direct upload, build a separate archive for each platform:
-
-```sh
-docker buildx build --pull --no-cache --platform linux/arm64 -t mikrotik-openvpn-client:arm64 --output type=docker,dest=mikrotik-openvpn-client-arm64.tar .
-docker buildx build --pull --no-cache --platform linux/arm/v7 -t mikrotik-openvpn-client:armv7 --output type=docker,dest=mikrotik-openvpn-client-armv7.tar .
-```
-
-The Dockerfile uses `alpine:latest` and installs the unpinned `openvpn` package from that image's current stable repository. `--pull --no-cache` ensures every release build resolves the newest base image and package available at build time. The exact resolved OpenVPN version is printed to the RouterOS container log at startup.
-
-## OpenVPN configuration
-
-Place `client.ovpn` and all referenced certificate/key/auth files in `disk1/ovpn-config`. Paths inside `client.ovpn` must point under `/config`, for example:
-
-```conf
-client
-dev tun
-proto udp
-remote vpn.example.net 1194
-ca /config/ca.crt
-cert /config/client.crt
-key /config/client.key
-auth-user-pass /config/auth.txt
-verb 3
-```
-
-Do not put `script-security`, `route-up`, or `route-pre-down` in this file; the entrypoint supplies them. The image currently synchronizes IPv4 routes only.
-
-### Supplied OpenVPN profile
-
-The supplied profile is compatible with the image and can be uploaded unchanged as `disk1/ovpn-config/client.ovpn`. It uses a routed TUN tunnel, embedded CA/client certificate/private key, TLS 1.2 or newer, `tls-crypt-v2`, SHA-256 authentication, and AES-256-CBC. No private material from that profile is copied into this project.
-
-The profile contains bare `auth-user-pass`. Set the credentials in the RouterOS container environment:
+1. Enable container support:
 
 ```routeros
-/container/envs/add list=ovpn-env key=OVPN_USERNAME value="VPN_USERNAME"
-/container/envs/add list=ovpn-env key=OVPN_PASSWORD value="VPN_PASSWORD"
+/system/device-mode/print
+/system/device-mode/update container=yes
 ```
 
-At startup the entrypoint writes these values to an ephemeral `/run/openvpn/auth.txt` with mode `0600`, passes it to OpenVPN, and deletes it at shutdown. It exits with a clear error if either variable is absent. The values remain visible to sufficiently privileged RouterOS administrators, so use a dedicated VPN account and restrict RouterOS access. `OVPN_DATA_CIPHERS` includes modern AEAD ciphers and the profile's `AES-256-CBC`, which preserves compatibility with OpenVPN 2.6 negotiation.
+Confirm the change using the physical button or a power cycle within the RouterOS time window.
 
-## RouterOS installation
+2. Download [`deploy-routeros.rsc`](deploy-routeros.rsc) and set the credentials at the top:
 
-1. On RouterOS 7.24, install the matching `container` package and enable container device mode with `/system/device-mode/update container=yes` (physical confirmation is required).
-2. Prefer external storage formatted for containers.
-3. Install a certificate for `www-ssl`; use TLS verification in production.
-4. Review and apply `routeros.rsc`.
-5. Start the container and inspect `/log/print` and `/container/print`.
+```routeros
+:local vpnUsername "VPN_LOGIN"
+:local vpnPassword "VPN_PASSWORD"
+:local apiPassword "LONG_RANDOM_API_PASSWORD"
+```
 
-For an automated idempotent deployment, edit the three credentials at the top of `deploy-routeros.rsc`, upload the complete profile to the documented path, copy the script to the router, and run:
+3. Upload the complete OpenVPN profile to:
+
+```text
+usb1/openvpn-client-ros/config/client.ovpn
+```
+
+4. Upload and run the deployment script:
 
 ```routeros
 /import file-name=deploy-routeros.rsc verbose=yes
 ```
 
-The example initially sets `ROS_VERIFY_TLS=false` so a self-signed RouterOS certificate does not prevent first startup. For production, mount the issuing CA into `/config`, then set:
+5. Verify the result:
 
 ```routeros
-/container/envs/set [find list=ovpn-env key=ROS_VERIFY_TLS] value=true
-/container/envs/add list=ovpn-env key=ROS_CA_FILE value=/config/router-ca.crt
+/container/print
+/log/print where topics~"container"
+/ip/route/print where comment="ovpn-client-ros"
+/ip/firewall/address-list/print where comment="ovpn-client-ros"
 ```
 
-RouterOS REST uses `www-ssl`; MikroTik recommends HTTPS rather than the plain `www` service. REST route creation uses `PUT /rest/ip/route`, and removal uses the record ID returned by `GET /rest/ip/route`.
+A successful synchronization ends with:
 
-## Route controls
+```text
+[route-sync] [info] sync complete: destinations=17 routes=on address-list=on
+```
 
-`OVPN_LEGACY_TAGS` accepts a comma- or space-separated list of previous route
-tags. On every reconciliation, entries with the current tag, the container
-name, or any legacy tag are replaced by entries carrying the current tag.
-Changing `OVPN_ROUTE_TAG` is therefore automatic when the previous tag was the
-container name; use `OVPN_LEGACY_TAGS` for any other historical custom tags.
+## 🚀 Automated deployment
 
-- `ALLOW_DEFAULT_ROUTE=false` rejects a pushed `0.0.0.0/0` by default.
-- `EXTRA_ROUTES="10.20.0.0/16 192.0.2.10/32"` adds explicit routes in addition to pushed routes.
-- `ROS_ROUTE_TABLE=main` selects the RouterOS routing table. A non-main table must already exist with `fib=yes`.
-- `ROS_ROUTE_DISTANCE=1` sets route distance.
-- `OVPN_CONTAINER_NAME=ovpn-client-ros` is the default ownership tag. It is written to the `comment` field of routes and address-list entries.
-- `OVPN_ROUTE_TAG` optionally overrides the ownership comment; an empty value uses `OVPN_CONTAINER_NAME`.
-- `OVPN_SYNC_ROUTES=true|false` enables or disables creation of `/ip/route` entries. Default: `true`.
-- `OVPN_SYNC_ADDRESS_LIST=true|false` enables or disables creation of firewall address-list entries. Default: `true`.
-- `OVPN_ADDRESS_LIST_NAME` selects the RouterOS firewall address-list. If empty, its name is taken from `OVPN_CONTAINER_NAME`.
-- `OVPN_ROUTE_TABLE=main` and `OVPN_ROUTE_DISTANCE=1` control generated routes.
-- Older `ROS_*` synchronization ENV names remain accepted as compatibility aliases.
-- `OVPN_RESTART_DELAY=10` controls the delay before restarting OpenVPN after a complete process exit.
-- `OVPN_LOG_LEVEL=error|warn|info|debug` controls container logging. Default: `info`.
-- `OVPN_VERB` optionally overrides the OpenVPN verbosity chosen from `LOG_LEVEL` (`1`, `2`, `3`, or `5`).
+[`deploy-routeros.rsc`](deploy-routeros.rsc) is safe to run repeatedly. It:
 
-## Reconnect and logging
+- 📁 validates the profile and prepares storage;
+- 🔌 creates a veth interface and an isolated `/30` network;
+- 🔀 configures the RouterOS address and outbound NAT;
+- 👤 creates a restricted RouterOS REST user;
+- 🔏 creates a local CA and `www-ssl` certificate with an IP SAN;
+- 🧱 limits REST access to the container IP;
+- 💾 creates the `/config` mount and ENV list;
+- 🔑 stores VPN and API passwords in files;
+- 🐳 pulls `blackxdog/openvpn-client-ros:latest`;
+- ▶️ creates the container and enables startup on boot.
 
-OpenVPN performs its normal in-process reconnect for transient transport failures. If OpenVPN exits completely, the entrypoint supervisor removes the managed RouterOS routes and owned address-list entries, writes the exit code and restart delay to the container log, and starts a new process. This repeats indefinitely until the container is stopped.
+| Variable | Default | Purpose |
+|---|---:|---|
+| `containerName` | `ovpn-client-ros` | Container name and default tag |
+| `imageName` | `blackxdog/openvpn-client-ros:latest` | Docker image |
+| `routerAddress` | `192.168.255.9/30` | RouterOS veth address |
+| `containerAddress` | `192.168.255.10/30` | Container address |
+| `storageRoot` | `usb1/openvpn-client-ros` | Container storage |
+| `routeTable` | `main` | RouterOS routing table |
+| `addressListName` | empty | Empty means container name |
+| `routeTag` | empty | Empty means container name |
+| `logLevel` | `info` | Container log level |
+| `recreateContainer` | `true` | Recreate an existing container |
 
-Keep `logging=yes` on the RouterOS container. OpenVPN output, route-sync actions, and timestamped supervisor lifecycle messages are written to stdout/stderr and appear in RouterOS logs. Useful commands are:
+> [!IMPORTANT]
+> Check the storage path and make sure the selected `/30` does not overlap
+> any existing router network before importing the script.
+
+### 📜 Complete deployment script
+
+Expand the block, copy it to `deploy-routeros.rsc`, and replace the three
+`CHANGE_ME_*` values before importing it.
+
+<details>
+<summary><strong>Show deploy-routeros.rsc</strong></summary>
+
+```routeros
+# Automated deployment for RouterOS 7.23/7.24.
+# Upload the complete profile to usb1/openvpn-client-ros/config/client.ovpn first.
+# Edit the three credentials below before importing this file.
+
+:local vpnUsername "CHANGE_ME_VPN_USERNAME"
+:local vpnPassword "CHANGE_ME_VPN_PASSWORD"
+:local apiPassword "CHANGE_ME_API_PASSWORD_ALNUM"
+
+:local containerName "ovpn-client-ros"
+:local imageName "registry-1.docker.io/blackxdog/openvpn-client-ros:latest"
+:local envList "OVPN-CLIENT-ROS"
+:local mountList "ovpn-client-ros-config"
+:local vethName "veth-ovpn-client"
+:local routerAddress "192.168.255.9/30"
+:local containerAddress "192.168.255.10/30"
+:local routerIP "192.168.255.9"
+:local containerIP "192.168.255.10"
+:local linkNetwork "192.168.255.8/30"
+:local storageRoot "usb1/openvpn-client-ros"
+:local profilePath "usb1/openvpn-client-ros/config/client.ovpn"
+:local routeTable "main"
+:local addressListName ""
+:local routeTag ""
+:local logLevel "info"
+:local recreateContainer true
+
+:if (($vpnUsername = "CHANGE_ME_VPN_USERNAME") or ($vpnPassword = "CHANGE_ME_VPN_PASSWORD")) do={
+    :error "Set vpnUsername and vpnPassword at the top of deploy-routeros.rsc"
+}
+:if ($apiPassword = "CHANGE_ME_API_PASSWORD_ALNUM") do={
+    :error "Set apiPassword at the top of deploy-routeros.rsc"
+}
+
+:put "[ovpn-deploy] preparing directories"
+:if ([:len [/file find where name=$storageRoot and type="directory"]] = 0) do={
+    /file add name=$storageRoot type=directory
+}
+:if ([:len [/file find where name=($storageRoot . "/config") and type="directory"]] = 0) do={
+    /file add name=($storageRoot . "/config") type=directory
+}
+
+:if ([:len [/file find where name=$profilePath]] = 0) do={
+    :error ("OpenVPN profile is missing: " . $profilePath)
+}
+
+:put "[ovpn-deploy] configuring veth and gateway"
+:local vethId [/interface/veth find where name=$vethName]
+:if ([:len $vethId] = 0) do={
+    /interface/veth add name=$vethName address=$containerAddress gateway=$routerIP comment=$containerName
+} else={
+    /interface/veth set $vethId address=$containerAddress gateway=$routerIP comment=$containerName
+}
+
+:local addressId [/ip/address find where comment=$containerName and interface=$vethName]
+:if ([:len $addressId] = 0) do={
+    /ip/address add address=$routerAddress interface=$vethName comment=$containerName
+} else={
+    /ip/address set $addressId address=$routerAddress interface=$vethName comment=$containerName
+}
+
+:put "[ovpn-deploy] configuring NAT and REST firewall access"
+:local natId [/ip/firewall/nat find where comment=($containerName . " outbound")]
+:if ([:len $natId] = 0) do={
+    /ip/firewall/nat add chain=srcnat action=masquerade src-address=$linkNetwork out-interface-list=WAN comment=($containerName . " outbound")
+} else={
+    /ip/firewall/nat set $natId chain=srcnat action=masquerade src-address=$linkNetwork out-interface-list=WAN disabled=no
+}
+
+:local filterId [/ip/firewall/filter find where comment=($containerName . " REST API")]
+:if ([:len $filterId] = 0) do={
+    /ip/firewall/filter add chain=input action=accept protocol=tcp src-address=$containerIP dst-port=80,443 place-before=0 comment=($containerName . " REST API")
+} else={
+    /ip/firewall/filter set $filterId chain=input action=accept protocol=tcp src-address=$containerIP dst-port=80,443 disabled=no
+}
+
+:put "[ovpn-deploy] configuring restricted REST account"
+:local apiGroup "api-ovpn-routes"
+:local apiUser "api-ovpn-client"
+:local groupId [/user/group find where name=$apiGroup]
+:if ([:len $groupId] = 0) do={
+    /user/group add name=$apiGroup policy=read,write,web,api,rest-api
+} else={
+    /user/group set $groupId policy=read,write,web,api,rest-api
+}
+:local userId [/user find where name=$apiUser]
+:if ([:len $userId] = 0) do={
+    /user add name=$apiUser group=$apiGroup password=$apiPassword address=($containerIP . "/32") comment=$containerName
+} else={
+    /user set $userId group=$apiGroup password=$apiPassword address=($containerIP . "/32") disabled=no comment=$containerName
+}
+:put "[ovpn-deploy] configuring self-signed REST HTTPS certificate"
+:local restCertName ($containerName . "-rest")
+:local restCaName ($containerName . "-rest-ca")
+:local restCaId [/certificate find where name=$restCaName]
+:if ([:len $restCaId] = 0) do={
+    /certificate add name=$restCaName common-name=($containerName . " REST CA") key-usage=key-cert-sign,crl-sign days-valid=3650
+    /certificate sign $restCaName
+    /certificate set [find where name=$restCaName] trusted=yes
+}
+:local restCertId [/certificate find where name=$restCertName]
+:if ([:len $restCertId] = 0) do={
+    /certificate add name=$restCertName common-name=$routerIP subject-alt-name=("IP:" . $routerIP) key-usage=tls-server,digital-signature,key-encipherment days-valid=3650
+    /certificate sign $restCertName ca=$restCaName
+    /certificate set [find where name=$restCertName] trusted=yes
+}
+/ip/service set www-ssl disabled=no address=($containerIP . "/32") certificate=$restCertName tls-version=only-1.2
+# Plain HTTP remains available only from the isolated container IP as a fallback.
+/ip/service set www disabled=no address=($containerIP . "/32")
+
+:put "[ovpn-deploy] configuring read-only profile mount"
+:local oldMounts [/container/mounts find where list=$mountList]
+:if ([:len $oldMounts] > 0) do={ /container/mounts remove $oldMounts }
+/container/mounts add list=$mountList src=($storageRoot . "/config") dst="/config" mode=ro
+
+:local ovpnSetEnv do={
+    :local itemId [/container/envs find where list=$listName and key=$keyName]
+    :if ([:len $itemId] = 0) do={
+        /container/envs add list=$listName key=$keyName value=$keyValue
+    } else={
+        /container/envs set $itemId value=$keyValue
+    }
+}
+
+:put "[ovpn-deploy] configuring OVPN environment"
+:local vpnPasswordFile ($storageRoot . "/config/openvpn-password")
+:local apiPasswordFile ($storageRoot . "/config/router-api-password")
+:foreach secretSpec in={($vpnPasswordFile . "=" . $vpnPassword);($apiPasswordFile . "=" . $apiPassword)} do={
+    :local separator [:find $secretSpec "="]
+    :local secretPath [:pick $secretSpec 0 $separator]
+    :local secretValue [:pick $secretSpec ($separator + 1) [:len $secretSpec]]
+    :local secretId [/file find where name=$secretPath]
+    :if ([:len $secretId] = 0) do={
+        /file add name=$secretPath contents=$secretValue
+    } else={
+        /file set $secretId contents=$secretValue
+    }
+}
+$ovpnSetEnv listName=$envList keyName="OVPN_CONFIG" keyValue="/config/client.ovpn"
+$ovpnSetEnv listName=$envList keyName="OVPN_USERNAME" keyValue=$vpnUsername
+:local oldVpnPasswordEnv [/container/envs find where list=$envList and key="OVPN_PASSWORD"]
+:if ([:len $oldVpnPasswordEnv] > 0) do={ /container/envs remove $oldVpnPasswordEnv }
+$ovpnSetEnv listName=$envList keyName="OVPN_PASSWORD_FILE" keyValue="/config/openvpn-password"
+$ovpnSetEnv listName=$envList keyName="OVPN_DATA_CIPHERS" keyValue="AES-256-GCM:AES-128-GCM:CHACHA20-POLY1305:AES-256-CBC"
+$ovpnSetEnv listName=$envList keyName="OVPN_RESTART_DELAY" keyValue="10"
+$ovpnSetEnv listName=$envList keyName="OVPN_LOG_LEVEL" keyValue=$logLevel
+$ovpnSetEnv listName=$envList keyName="OVPN_API_URL" keyValue=("https://" . $routerIP)
+$ovpnSetEnv listName=$envList keyName="OVPN_API_USER" keyValue=$apiUser
+:local oldApiPasswordEnv [/container/envs find where list=$envList and key="OVPN_API_PASSWORD"]
+:if ([:len $oldApiPasswordEnv] > 0) do={ /container/envs remove $oldApiPasswordEnv }
+$ovpnSetEnv listName=$envList keyName="OVPN_API_PASSWORD_FILE" keyValue="/config/router-api-password"
+$ovpnSetEnv listName=$envList keyName="OVPN_API_VERIFY_TLS" keyValue="false"
+$ovpnSetEnv listName=$envList keyName="OVPN_GATEWAY" keyValue=$containerIP
+$ovpnSetEnv listName=$envList keyName="OVPN_CONTAINER_NAME" keyValue=$containerName
+$ovpnSetEnv listName=$envList keyName="OVPN_ROUTE_TAG" keyValue=$routeTag
+$ovpnSetEnv listName=$envList keyName="OVPN_SYNC_ROUTES" keyValue="true"
+$ovpnSetEnv listName=$envList keyName="OVPN_SYNC_ADDRESS_LIST" keyValue="true"
+$ovpnSetEnv listName=$envList keyName="OVPN_ADDRESS_LIST_NAME" keyValue=$addressListName
+$ovpnSetEnv listName=$envList keyName="OVPN_ROUTE_TABLE" keyValue=$routeTable
+$ovpnSetEnv listName=$envList keyName="OVPN_ROUTE_DISTANCE" keyValue="1"
+$ovpnSetEnv listName=$envList keyName="OVPN_ALLOW_DEFAULT_ROUTE" keyValue="false"
+$ovpnSetEnv listName=$envList keyName="OVPN_EXTRA_ROUTES" keyValue=""
+
+/container/config set registry-url="https://registry-1.docker.io" tmpdir=($storageRoot . "/tmp")
+
+:local containerId [/container find where name=$containerName]
+:if (([:len $containerId] > 0) and $recreateContainer) do={
+    :put "[ovpn-deploy] removing previous ovpn-client-ros container"
+    /container stop $containerId
+    :delay 3s
+    /container remove $containerId
+    :delay 2s
+    :set containerId ""
+}
+
+:if ([:len $containerId] = 0) do={
+    :put "[ovpn-deploy] downloading container image"
+    /container add name=$containerName remote-image=$imageName interface=$vethName root-dir=($storageRoot . "/root") mountlists=$mountList envlists=$envList user="0:0" dns="1.1.1.1" logging=yes start-on-boot=yes comment=$containerName
+}
+
+:put "[ovpn-deploy] waiting for image extraction"
+:local ready false
+:for attempt from=1 to=120 do={
+    :set containerId [/container find where name=$containerName]
+    :if ([:len $containerId] > 0) do={
+        :local currentStatus [/container get $containerId status]
+        :if ($currentStatus = "stopped") do={
+            :set ready true
+            :break
+        }
+    }
+    :if (!$ready) do={ :delay 5s }
+}
+
+:if (!$ready) do={
+    :error "Container image was not ready after 10 minutes; check /container/print and /log/print"
+}
+
+:put "[ovpn-deploy] starting container"
+/container start $containerId
+:delay 5s
+/container print detail where name=$containerName
+:put "[ovpn-deploy] complete; inspect /log/print where topics~\"container\""
+```
+
+</details>
+
+## 🌐 Traffic flow
+
+```text
+LAN client
+    │
+    ▼
+RouterOS route
+    │ gateway = container veth IP
+    ▼
+container eth0 ── forwarding + masquerade ── tun0 ── VPN
+```
+
+The RouterOS gateway is the container veth address, not the remote tunnel gateway.
+
+## 🧱 Supported architectures
+
+| MikroTik family | RouterOS arch | Docker platform | Status |
+|---|---|---|---|
+| RB4011 and other ARMv7 devices | `arm` | `linux/arm/v7` | ✅ |
+| RB5009 and other ARM64 devices | `arm64` | `linux/arm64` | ✅ |
+| ARMv5 devices | `arm` | `linux/arm/v5` | ❌ |
+| x86 / CHR | `x86_64` | `linux/amd64` | ❌ |
+
+> [!TIP]
+> RB4011 reports `arm`, not `arm64`; Docker Hub selects the `linux/arm/v7` manifest.
+
+## 📁 Mount
+
+Only one persistent mount is required:
+
+```text
+usb1/openvpn-client-ros/config  →  /config
+```
+
+It holds `client.ovpn`, referenced keys, an optional RouterOS CA, and password files.
+
+## ⚙️ Environment variables
+
+### 🔗 OpenVPN and supervisor
+
+| ENV | Default | Purpose |
+|---|---|---|
+| `OVPN_CONFIG` | `/config/client.ovpn` | OpenVPN profile |
+| `OVPN_USERNAME` | — | VPN username |
+| `OVPN_PASSWORD` | — | VPN password; prefer the file option |
+| `OVPN_PASSWORD_FILE` | — | VPN password file |
+| `OVPN_DATA_CIPHERS` | image default | Cipher negotiation list |
+| `OVPN_RESTART_DELAY` | `10` | Delay after a complete OpenVPN exit |
+| `OVPN_LOG_LEVEL` | `info` | `error`, `warn`, `info`, or `debug` |
+| `OVPN_VERB` | derived | Optional OpenVPN verbosity override |
+
+### 🔐 RouterOS REST
+
+| ENV | Default | Purpose |
+|---|---|---|
+| `OVPN_API_URL` | — | RouterOS REST base URL |
+| `OVPN_API_USER` | — | Restricted REST username |
+| `OVPN_API_PASSWORD` | — | REST password; prefer the file option |
+| `OVPN_API_PASSWORD_FILE` | — | REST password file |
+| `OVPN_API_VERIFY_TLS` | `true` | Verify RouterOS HTTPS certificate |
+| `ROS_CA_FILE` | — | Optional custom CA file under `/config` |
+
+### 🛣 Routes and address lists
+
+| ENV | Default | Purpose |
+|---|---|---|
+| `OVPN_CONTAINER_NAME` | `ovpn-client-ros` | Identity and fallback tag |
+| `OVPN_ROUTE_TAG` | empty | Comment; empty uses container name |
+| `OVPN_LEGACY_TAGS` | empty | Previous custom tags to clean up |
+| `OVPN_SYNC_ROUTES` | `true` | Synchronize `/ip/route` |
+| `OVPN_SYNC_ADDRESS_LIST` | `true` | Synchronize firewall address list |
+| `OVPN_ADDRESS_LIST_NAME` | empty | Empty uses container name |
+| `OVPN_ROUTE_TABLE` | `main` | Target routing table |
+| `OVPN_ROUTE_DISTANCE` | `1` | Generated route distance |
+| `OVPN_ALLOW_DEFAULT_ROUTE` | `false` | Allow pushed `0.0.0.0/0` |
+| `OVPN_EXTRA_ROUTES` | empty | Extra space-separated CIDRs |
+
+Legacy `ROS_*` synchronization names remain accepted as compatibility aliases.
+
+## ♻️ Reconciliation
+
+On connect, startup, and reconnect, desired VPN networks are compared with RouterOS
+records carrying the ownership tag. Valid records remain untouched, missing records
+are created, and stale owned records are removed. Unrelated records are never modified.
+
+## 🔄 Reconnect and logs
+
+OpenVPN handles transient failures internally. If it exits, the supervisor removes
+owned records, logs the exit code, waits `OVPN_RESTART_DELAY`, and starts it again.
 
 ```routeros
 /log/print where topics~"container"
-/container/print detail where name="ovpn-client"
+/container/print detail where name="ovpn-client-ros"
 ```
 
-Typical supervisor messages contain the `[ovpn-supervisor]` marker. Route creation and removal messages contain `created RouterOS route` or `deleted RouterOS route`.
+## 🐳 Build
 
-Only one persistent mount is required: `disk1/ovpn-config` to `/config`. The supplied profile embeds its CA, client certificate, private key, and tls-crypt-v2 material. VPN credentials are generated under the ephemeral `/run` filesystem from environment variables. A RouterOS REST CA file, if needed, can share `/config`.
+```sh
+docker buildx build --pull --no-cache \
+  --platform linux/arm/v7,linux/arm64 \
+  -t blackxdog/openvpn-client-ros:latest --push .
+```
 
-To keep secrets out of RouterOS container startup logs while retaining
-`logging=yes`, store them in the profile mount and use
-`OVPN_PASSWORD_FILE=/config/openvpn-password` and
-`OVPN_API_PASSWORD_FILE=/config/router-api-password`. File settings take
-precedence over the corresponding plaintext environment variables.
+The image uses `alpine:latest` and installs the current OpenVPN package at build time.
 
-The OpenVPN server endpoint must remain reachable through the WAN. If default routing is later enabled, add an explicit RouterOS host route for the VPN server through the normal WAN first.
+## 🛡 Security
 
-## Security notes
+- Use dedicated VPN and RouterOS REST accounts.
+- Restrict REST to the isolated container IP.
+- Prefer `www-ssl`; plain `www` is only an isolated fallback.
+- Use `OVPN_PASSWORD_FILE` and `OVPN_API_PASSWORD_FILE` for secrets.
+- Never include private profiles, keys, or password files in the image.
 
-- Replace the sample password before applying the script.
-- Restrict `www-ssl` and the input firewall to the container address.
-- `read,write,rest-api` is the smallest practical RouterOS policy combination for this REST workflow, but RouterOS policies are menu-wide rather than limited only to `/ip/route`.
-- The container must run as root because OpenVPN, TUN, forwarding, and iptables require network administration privileges.
-- Keep `client.ovpn`, keys, certificates, and `auth.txt` out of the image.
+## 📄 Project files
 
-## Current assumptions
-
-- RouterOS 7.24 on ARMv7 or ARM64. The same configuration targets RB4011 and RB5009; the registry manifest selects the correct image.
-- `veth-ovpn` is directly connected as `172.31.255.0/30` and is not added to the LAN bridge.
-- OpenVPN uses a routed `tun` tunnel, not TAP/bridging.
-- Only server-pushed and explicitly configured destination routes are synchronized; policy rules and mangle rules remain under RouterOS administration.
+| File | Purpose |
+|---|---|
+| [`Dockerfile`](Dockerfile) | Multi-architecture container image |
+| [`entrypoint.sh`](entrypoint.sh) | OpenVPN supervisor |
+| [`route_sync.py`](route_sync.py) | RouterOS reconciliation |
+| [`deploy-routeros.rsc`](deploy-routeros.rsc) | Automated RouterOS installation |
+| [`routeros.rsc`](routeros.rsc) | Manual RouterOS example |
+| [`README_RU.md`](README_RU.md) | Russian documentation |
