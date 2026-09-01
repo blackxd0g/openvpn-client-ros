@@ -435,6 +435,16 @@ The image uses `alpine:latest` and installs the current OpenVPN package at build
 - Use `OVPN_PASSWORD_FILE` and `OVPN_API_PASSWORD_FILE` for secrets.
 - Never include private profiles, keys, or password files in the image.
 
+## 💖 Support the project
+
+If `openvpn-client-ros` saved you time or proved useful, you can
+[support its development on Boosty](https://boosty.to/blackxdog/donate).
+
+[![Support on Boosty](https://img.shields.io/badge/Boosty-support-f15f2c?logo=boosty&logoColor=white)](https://boosty.to/blackxdog/donate)
+
+Your support helps test new RouterOS and OpenVPN releases, maintain ARMv7/ARM64
+builds, and improve automatic route synchronization.
+
 ## 📄 Project files
 
 | File | Purpose |

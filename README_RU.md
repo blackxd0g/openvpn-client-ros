@@ -525,6 +525,16 @@ Dockerfile использует `alpine:latest` и актуальный OpenVPN 
 - 🔌 Не добавляйте veth контейнера в LAN bridge.
 - ⚠️ Контейнер работает от root для TUN, forwarding и iptables.
 
+## 💖 Поддержка проекта
+
+Если `openvpn-client-ros` сэкономил вам время и оказался полезен, вы можете
+[поддержать разработку через Boosty](https://boosty.to/blackxdog/donate).
+
+[![Поддержать на Boosty](https://img.shields.io/badge/Boosty-поддержать-f15f2c?logo=boosty&logoColor=white)](https://boosty.to/blackxdog/donate)
+
+Поддержка помогает тестировать новые версии RouterOS и OpenVPN, поддерживать
+ARMv7/ARM64-сборки и развивать автоматическую синхронизацию маршрутов.
+
 ## 📄 Файлы проекта
 
 | Файл | Назначение |
