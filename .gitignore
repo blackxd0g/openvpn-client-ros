@@ -1,0 +1,11 @@
+*.ovpn
+*.key
+*.pem
+*.crt
+auth.txt
+openvpn-password
+router-api-password
+__pycache__/
+*.pyc
+.idea/
+.vscode/

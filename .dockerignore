@@ -1,0 +1,7 @@
+.git
+config
+*.ovpn
+*.key
+*.crt
+auth.txt
+
