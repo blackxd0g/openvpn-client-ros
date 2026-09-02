@@ -9,14 +9,14 @@
 [![Docker Pulls](https://img.shields.io/docker/pulls/blackxdog/openvpn-client-ros?logo=docker&label=docker%20pulls)](https://hub.docker.com/r/blackxdog/openvpn-client-ros)
 [![Docker Image Size](https://img.shields.io/docker/image-size/blackxdog/openvpn-client-ros/latest?logo=docker&label=image%20size)](https://hub.docker.com/r/blackxdog/openvpn-client-ros)
 [![Последний commit](https://img.shields.io/github/last-commit/blackxd0g/openvpn-client-ros?logo=github&label=last%20commit)](https://github.com/blackxd0g/openvpn-client-ros/commits/main)
-![Платформы](https://img.shields.io/badge/arch-armv7%20%7C%20arm64-success)
+![Платформы](https://img.shields.io/badge/arch-armv5%20%7C%20armv7%20%7C%20arm64%20%7C%20amd64-success)
 ![RouterOS](https://img.shields.io/badge/RouterOS-7.23%20%7C%207.24-blue)
 [![Boosty](https://img.shields.io/badge/Boosty-поддержать-f15f2c?logo=boosty&logoColor=white)](https://boosty.to/blackxdog/donate)
 
 ## ✨ Возможности
 
-- 📦 Один тег `latest` для `linux/arm/v7` и `linux/arm64`.
-- ✅ Поддержка RB4011 (`arm`) и RB5009 (`arm64`).
+- 📦 Один тег `latest` для `linux/arm/v5`, `linux/arm/v7`, `linux/arm64` и `linux/amd64`.
+- ✅ Поддержка ARM-моделей, RB4011, RB5009, x86 и CHR.
 - 🔄 Автоматическое переподключение OpenVPN с выводом причины в журнал.
 - 🛣 Синхронизация pushed IPv4-маршрутов с `/ip/route`.
 - 🧾 Синхронизация тех же сетей с `/ip/firewall/address-list`.
@@ -363,11 +363,13 @@ OpenVPN-туннеля, как RouterOS gateway не используется.
 | RouterOS | Docker platform | Примеры | Статус |
 |---|---|---|---|
 | `arm64` | `linux/arm64` | RB5009 | ✅ |
-| `arm` | `linux/arm/v7` | RB4011 | ✅ |
-| ARMv5 | — | старые ARM-модели | ❌ |
-| x86/CHR | — | CHR, x86 | ❌ |
+| `arm` | `linux/arm/v5` | RB4011 и другие ARM32-модели | ✅ Рекомендуется для RouterOS |
+| `arm` | `linux/arm/v7` | ARMv7 вне RouterOS / ручной импорт | ✅ |
+| `x86` / CHR | `linux/amd64` | CHR, x86-64 | ✅ |
 
-RB4011 отображается как `arm`, поэтому Docker выбирает `linux/arm/v7`.
+RouterOS для архитектуры `arm` ожидает ARM32/ARMv5-контейнер. Поэтому тег
+`latest` содержит отдельный ARMv5-вариант на Debian `armel`; ARM64, ARMv7 и
+AMD64 собираются на Alpine.
 
 ## 📁 Точка монтирования
 
@@ -524,12 +526,22 @@ Initialization Sequence Completed
 
 ```sh
 docker buildx build --pull --no-cache \
-  --platform linux/arm/v7,linux/arm64 \
+  --platform linux/arm/v7,linux/arm64,linux/amd64 \
+  -t YOUR_DOCKERHUB/openvpn-client-ros:latest-modern --push .
+
+docker buildx build --pull --no-cache \
+  --platform linux/arm/v5 -f Dockerfile.armv5 \
+  -t YOUR_DOCKERHUB/openvpn-client-ros:latest-armv5 --push .
+
+docker buildx imagetools create \
   -t YOUR_DOCKERHUB/openvpn-client-ros:latest \
-  --push .
+  YOUR_DOCKERHUB/openvpn-client-ros:latest-modern \
+  YOUR_DOCKERHUB/openvpn-client-ros:latest-armv5
 ```
 
-Dockerfile использует `alpine:latest` и актуальный OpenVPN из Alpine.
+Основной Dockerfile использует `alpine:latest`, а ARMv5 — официальный
+`arm32v5/debian:bookworm-slim`. В обоих случаях OpenVPN устанавливается из
+актуального репозитория дистрибутива во время сборки.
 
 ## 🛡 Безопасность
 

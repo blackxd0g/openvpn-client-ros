@@ -9,14 +9,14 @@
 [![Docker Pulls](https://img.shields.io/docker/pulls/blackxdog/openvpn-client-ros?logo=docker&label=docker%20pulls)](https://hub.docker.com/r/blackxdog/openvpn-client-ros)
 [![Docker Image Size](https://img.shields.io/docker/image-size/blackxdog/openvpn-client-ros/latest?logo=docker&label=image%20size)](https://hub.docker.com/r/blackxdog/openvpn-client-ros)
 [![Last commit](https://img.shields.io/github/last-commit/blackxd0g/openvpn-client-ros?logo=github&label=last%20commit)](https://github.com/blackxd0g/openvpn-client-ros/commits/main)
-![Platforms](https://img.shields.io/badge/arch-armv7%20%7C%20arm64-success)
+![Platforms](https://img.shields.io/badge/arch-armv5%20%7C%20armv7%20%7C%20arm64%20%7C%20amd64-success)
 ![RouterOS](https://img.shields.io/badge/RouterOS-7.23%20%7C%207.24-blue)
 [![Boosty](https://img.shields.io/badge/Boosty-support-f15f2c?logo=boosty&logoColor=white)](https://boosty.to/blackxdog/donate)
 
 ## ✨ Features
 
-- 📦 One `latest` tag for `linux/arm/v7` and `linux/arm64`.
-- ✅ Supports RB4011 (`arm`) and RB5009 (`arm64`).
+- 📦 One `latest` tag for `linux/arm/v5`, `linux/arm/v7`, `linux/arm64`, and `linux/amd64`.
+- ✅ Supports ARM models, RB4011, RB5009, x86, and CHR.
 - 🔄 Automatic OpenVPN reconnection with reasons written to the log.
 - 🛣 Synchronizes pushed IPv4 networks with `/ip/route`.
 - 🧾 Synchronizes the same networks with `/ip/firewall/address-list`.
@@ -356,13 +356,14 @@ The RouterOS gateway is the container veth address, not the remote tunnel gatewa
 
 | MikroTik family | RouterOS arch | Docker platform | Status |
 |---|---|---|---|
-| RB4011 and other ARMv7 devices | `arm` | `linux/arm/v7` | ✅ |
+| RB4011 and other ARM32 devices | `arm` | `linux/arm/v5` | ✅ Recommended for RouterOS |
+| Generic ARMv7 | `arm` | `linux/arm/v7` | ✅ Manual/non-RouterOS use |
 | RB5009 and other ARM64 devices | `arm64` | `linux/arm64` | ✅ |
-| ARMv5 devices | `arm` | `linux/arm/v5` | ❌ |
-| x86 / CHR | `x86_64` | `linux/amd64` | ❌ |
+| x86 / CHR | `x86_64` | `linux/amd64` | ✅ |
 
 > [!TIP]
-> RB4011 reports `arm`, not `arm64`; Docker Hub selects the `linux/arm/v7` manifest.
+> RouterOS expects ARM32/ARMv5 container images for its `arm` architecture.
+> The `latest` tag therefore includes a dedicated Debian `armel` image.
 
 ## 📁 Mount
 
@@ -437,11 +438,22 @@ owned records, logs the exit code, waits `OVPN_RESTART_DELAY`, and starts it aga
 
 ```sh
 docker buildx build --pull --no-cache \
-  --platform linux/arm/v7,linux/arm64 \
-  -t blackxdog/openvpn-client-ros:latest --push .
+  --platform linux/arm/v7,linux/arm64,linux/amd64 \
+  -t blackxdog/openvpn-client-ros:latest-modern --push .
+
+docker buildx build --pull --no-cache \
+  --platform linux/arm/v5 -f Dockerfile.armv5 \
+  -t blackxdog/openvpn-client-ros:latest-armv5 --push .
+
+docker buildx imagetools create \
+  -t blackxdog/openvpn-client-ros:latest \
+  blackxdog/openvpn-client-ros:latest-modern \
+  blackxdog/openvpn-client-ros:latest-armv5
 ```
 
-The image uses `alpine:latest` and installs the current OpenVPN package at build time.
+The ARM64, ARMv7, and AMD64 variants use `alpine:latest`. ARMv5 uses the official
+`arm32v5/debian:bookworm-slim` base. Both install the current distribution OpenVPN
+package at build time.
 
 ## 🛡 Security
 

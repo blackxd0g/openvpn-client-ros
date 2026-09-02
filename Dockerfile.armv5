@@ -1,9 +1,9 @@
-FROM alpine:latest
+FROM arm32v5/debian:bookworm-slim
 
-ARG TARGETARCH
-ARG TARGETVARIANT
-
-RUN apk add --no-cache openvpn iptables python3 ca-certificates tini \
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        openvpn iptables python3 ca-certificates tini procps \
+    && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /config /run/openvpn
 
 COPY entrypoint.sh route-hook.sh route_sync.py /usr/local/bin/
@@ -26,6 +26,6 @@ ENV OVPN_CONFIG=/config/client.ovpn \
     OVPN_EXTRA_ROUTES=""
 
 LABEL org.opencontainers.image.title="MikroTik OpenVPN client gateway" \
-      org.opencontainers.image.description="Latest Alpine OpenVPN client with RouterOS REST route synchronization for ARMv7, ARM64, and AMD64"
+      org.opencontainers.image.description="OpenVPN client with RouterOS REST route synchronization for RouterOS ARM32/ARMv5"
 
-ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/entrypoint.sh"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]
