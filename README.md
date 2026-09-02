@@ -56,10 +56,11 @@ Open `deploy-routeros.rsc` in **Files** and review the network settings if neede
 The script asks for the VPN login and password when it starts and automatically
 generates a separate 40-character RouterOS REST API password.
 
-3. Upload the complete OpenVPN profile to:
+3. Upload the OpenVPN profile to one of these locations, then select it in the installer:
 
 ```text
 usb1/openvpn-client-ros/config/client.ovpn
+openvpn-client-ros/config/client.ovpn         # system
 ```
 
 4. Upload and run the deployment script:
@@ -91,7 +92,7 @@ A successful synchronization ends with:
 
 [`deploy-routeros.rsc`](deploy-routeros.rsc) is safe to run repeatedly. It:
 
-- 📁 validates the profile and prepares storage;
+- 📁 asks for `usb1` or `system`, validates the profile, and prepares storage;
 - 🔌 creates a veth interface and an isolated `/30` network;
 - 🔀 configures the RouterOS address and outbound NAT;
 - 👤 creates a restricted RouterOS REST user;
@@ -108,7 +109,7 @@ A successful synchronization ends with:
 | `imageName` | `blackxdog/openvpn-client-ros:latest` | Docker image |
 | `routerAddress` | `192.168.255.9/30` | RouterOS veth address |
 | `containerAddress` | `192.168.255.10/30` | Container address |
-| `storageRoot` | `usb1/openvpn-client-ros` | Container storage |
+| `storageChoice` | prompted | `usb1` or built-in `system` storage |
 | `routeTable` | `main` | RouterOS routing table |
 | `addressListName` | empty | Empty means container name |
 | `routeTag` | empty | Empty means container name |
@@ -116,8 +117,8 @@ A successful synchronization ends with:
 | `recreateContainer` | `true` | Recreate an existing container |
 
 > [!IMPORTANT]
-> Check the storage path and make sure the selected `/30` does not overlap
-> any existing router network before importing the script.
+> When selecting `system`, make sure internal storage has enough free space.
+> The selected `/30` must not overlap any existing router network.
 
 ### 📜 Complete deployment script
 
@@ -130,7 +131,7 @@ password widget, so use a trusted SSH or WinBox session.
 
 ```routeros
 # Automated deployment for RouterOS 7.23/7.24.
-# Upload the complete profile to usb1/openvpn-client-ros/config/client.ovpn first.
+# Upload client.ovpn to the selected system or usb1 storage before running.
 # Run this file from an interactive RouterOS terminal.
 
 :local vpnUsername ""
@@ -147,13 +148,29 @@ password widget, so use a trusted SSH or WinBox session.
 :local routerIP "192.168.255.9"
 :local containerIP "192.168.255.10"
 :local linkNetwork "192.168.255.8/30"
-:local storageRoot "usb1/openvpn-client-ros"
-:local profilePath "usb1/openvpn-client-ros/config/client.ovpn"
+:local storageChoice ""
+:local storageRoot ""
+:local profilePath ""
 :local routeTable "main"
 :local addressListName ""
 :local routeTag ""
 :local logLevel "info"
 :local recreateContainer true
+
+:while (($storageChoice != "usb1") and ($storageChoice != "system")) do={
+    :put "[ovpn-deploy] Select container storage: usb1 or system"
+    :set storageChoice [/terminal ask]
+}
+:if ($storageChoice = "usb1") do={
+    :if ([:len [/disk find where slot="usb1"]] = 0) do={
+        :error "usb1 disk was not found; attach it or run again and select system"
+    }
+    :set storageRoot "usb1/openvpn-client-ros"
+} else={
+    :set storageRoot "openvpn-client-ros"
+}
+:set profilePath ($storageRoot . "/config/client.ovpn")
+:put ("[ovpn-deploy] storage selected: " . $storageChoice . "; profile: " . $profilePath)
 
 :put "[ovpn-deploy] Enter VPN login:"
 :set vpnUsername [/terminal ask]

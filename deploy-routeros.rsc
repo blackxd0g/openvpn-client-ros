@@ -1,5 +1,5 @@
 # Automated deployment for RouterOS 7.23/7.24.
-# Upload the complete profile to usb1/openvpn-client-ros/config/client.ovpn first.
+# Upload client.ovpn to the selected system or usb1 storage before running.
 # Run this file from an interactive RouterOS terminal.
 
 :local vpnUsername ""
@@ -16,13 +16,29 @@
 :local routerIP "192.168.255.9"
 :local containerIP "192.168.255.10"
 :local linkNetwork "192.168.255.8/30"
-:local storageRoot "usb1/openvpn-client-ros"
-:local profilePath "usb1/openvpn-client-ros/config/client.ovpn"
+:local storageChoice ""
+:local storageRoot ""
+:local profilePath ""
 :local routeTable "main"
 :local addressListName ""
 :local routeTag ""
 :local logLevel "info"
 :local recreateContainer true
+
+:while (($storageChoice != "usb1") and ($storageChoice != "system")) do={
+    :put "[ovpn-deploy] Select container storage: usb1 or system"
+    :set storageChoice [/terminal ask]
+}
+:if ($storageChoice = "usb1") do={
+    :if ([:len [/disk find where slot="usb1"]] = 0) do={
+        :error "usb1 disk was not found; attach it or run again and select system"
+    }
+    :set storageRoot "usb1/openvpn-client-ros"
+} else={
+    :set storageRoot "openvpn-client-ros"
+}
+:set profilePath ($storageRoot . "/config/client.ovpn")
+:put ("[ovpn-deploy] storage selected: " . $storageChoice . "; profile: " . $profilePath)
 
 :put "[ovpn-deploy] Enter VPN login:"
 :set vpnUsername [/terminal ask]
