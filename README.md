@@ -49,16 +49,12 @@ Confirm the change using the physical button or a power cycle within the RouterO
 :local url "https://raw.githubusercontent.com/blackxd0g/openvpn-client-ros/main/deploy-routeros.rsc"
 :local dst "deploy-routeros.rsc"
 /tool fetch url=$url mode=https dst-path=$dst
-:put ("Downloaded " . $dst . ". Review its credentials and network settings before import.")
+:put ("Downloaded " . $dst . ". Review its network settings before import.")
 ```
 
-Open `deploy-routeros.rsc` in **Files** and set the credentials at the top:
-
-```routeros
-:local vpnUsername "VPN_LOGIN"
-:local vpnPassword "VPN_PASSWORD"
-:local apiPassword "LONG_RANDOM_API_PASSWORD"
-```
+Open `deploy-routeros.rsc` in **Files** and review the network settings if needed.
+The script asks for the VPN login and password when it starts and automatically
+generates a separate 40-character RouterOS REST API password.
 
 3. Upload the complete OpenVPN profile to:
 
@@ -125,8 +121,9 @@ A successful synchronization ends with:
 
 ### 📜 Complete deployment script
 
-Expand the block, copy it to `deploy-routeros.rsc`, and replace the three
-`CHANGE_ME_*` values before importing it.
+Expand the block and copy it to `deploy-routeros.rsc`. Run it from an interactive
+terminal: it asks for the VPN login and password. `/terminal ask` is not a masked
+password widget, so use a trusted SSH or WinBox session.
 
 <details>
 <summary><strong>Show deploy-routeros.rsc</strong></summary>
@@ -134,11 +131,11 @@ Expand the block, copy it to `deploy-routeros.rsc`, and replace the three
 ```routeros
 # Automated deployment for RouterOS 7.23/7.24.
 # Upload the complete profile to usb1/openvpn-client-ros/config/client.ovpn first.
-# Edit the three credentials below before importing this file.
+# Run this file from an interactive RouterOS terminal.
 
-:local vpnUsername "CHANGE_ME_VPN_USERNAME"
-:local vpnPassword "CHANGE_ME_VPN_PASSWORD"
-:local apiPassword "CHANGE_ME_API_PASSWORD_ALNUM"
+:local vpnUsername ""
+:local vpnPassword ""
+:local apiPassword [:rndstr from="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz" length=40]
 
 :local containerName "ovpn-client-ros"
 :local imageName "registry-1.docker.io/blackxdog/openvpn-client-ros:latest"
@@ -158,12 +155,13 @@ Expand the block, copy it to `deploy-routeros.rsc`, and replace the three
 :local logLevel "info"
 :local recreateContainer true
 
-:if (($vpnUsername = "CHANGE_ME_VPN_USERNAME") or ($vpnPassword = "CHANGE_ME_VPN_PASSWORD")) do={
-    :error "Set vpnUsername and vpnPassword at the top of deploy-routeros.rsc"
-}
-:if ($apiPassword = "CHANGE_ME_API_PASSWORD_ALNUM") do={
-    :error "Set apiPassword at the top of deploy-routeros.rsc"
-}
+:put "[ovpn-deploy] Enter VPN login:"
+:set vpnUsername [/terminal ask]
+:if ([:len $vpnUsername] = 0) do={ :error "VPN login cannot be empty" }
+:put "[ovpn-deploy] Enter VPN password (input may be visible in the terminal):"
+:set vpnPassword [/terminal ask]
+:if ([:len $vpnPassword] = 0) do={ :error "VPN password cannot be empty" }
+:put "[ovpn-deploy] RouterOS REST API password generated automatically"
 
 :put "[ovpn-deploy] preparing directories"
 :if ([:len [/file find where name=$storageRoot and type="directory"]] = 0) do={
