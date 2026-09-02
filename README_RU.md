@@ -6,9 +6,12 @@
 > Получает маршруты от OpenVPN-сервера, синхронизирует `/ip/route` и firewall
 > address-list через RouterOS REST API и переподключается при обрыве туннеля.
 
-[![Docker Image](https://img.shields.io/badge/Docker%20Hub-blackxdog%2Fopenvpn--client--ros-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/blackxdog/openvpn-client-ros)
-![Platforms](https://img.shields.io/badge/platform-armv7%20%7C%20arm64-success)
+[![Docker Pulls](https://img.shields.io/docker/pulls/blackxdog/openvpn-client-ros?logo=docker&label=docker%20pulls)](https://hub.docker.com/r/blackxdog/openvpn-client-ros)
+[![Docker Image Size](https://img.shields.io/docker/image-size/blackxdog/openvpn-client-ros/latest?logo=docker&label=image%20size)](https://hub.docker.com/r/blackxdog/openvpn-client-ros)
+[![Последний commit](https://img.shields.io/github/last-commit/blackxd0g/openvpn-client-ros?logo=github&label=last%20commit)](https://github.com/blackxd0g/openvpn-client-ros/commits/main)
+![Платформы](https://img.shields.io/badge/arch-armv7%20%7C%20arm64-success)
 ![RouterOS](https://img.shields.io/badge/RouterOS-7.23%20%7C%207.24-blue)
+[![Boosty](https://img.shields.io/badge/Boosty-поддержать-f15f2c?logo=boosty&logoColor=white)](https://boosty.to/blackxdog/donate)
 
 ## ✨ Возможности
 
@@ -41,8 +44,17 @@
 После команды подтвердите изменение физической кнопкой или перезапуском
 питания в отведённое RouterOS время.
 
-2. Скачайте [`deploy-routeros.rsc`](deploy-routeros.rsc) и укажите в начале
-   файла учётные данные:
+2. Скачайте установщик прямо из терминала MikroTik:
+
+```routeros
+:local url "https://raw.githubusercontent.com/blackxd0g/openvpn-client-ros/main/deploy-routeros.rsc"
+:local dst "deploy-routeros.rsc"
+/tool fetch url=$url mode=https dst-path=$dst
+:put ("Downloaded " . $dst . ". Review its credentials and network settings before import.")
+```
+
+Откройте `deploy-routeros.rsc` в разделе **Files** и укажите в начале файла
+учётные данные:
 
 ```routeros
 :local vpnUsername "VPN_LOGIN"
@@ -78,6 +90,10 @@ usb1/openvpn-client-ros/config/client.ovpn
 ```
 
 ## 🚀 Автоматическая установка
+
+[![Установщик](https://img.shields.io/badge/RouterOS-скачать%20установщик-0A84FF?logo=mikrotik&logoColor=white)](deploy-routeros.rsc)
+[![Docker Hub](https://img.shields.io/badge/Docker%20Hub-открыть%20образ-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/blackxdog/openvpn-client-ros)
+[![Совместимость](https://img.shields.io/badge/docs-совместимость%20профилей-7B61FF)](PROFILE-COMPATIBILITY.md)
 
 [`deploy-routeros.rsc`](deploy-routeros.rsc) рассчитан на повторный запуск. Он:
 

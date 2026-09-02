@@ -6,9 +6,12 @@
 > It receives routes pushed by the OpenVPN server, synchronizes RouterOS
 > `/ip/route` and firewall address lists through REST, and reconnects automatically.
 
-[![Docker Image](https://img.shields.io/badge/Docker%20Hub-blackxdog%2Fopenvpn--client--ros-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/blackxdog/openvpn-client-ros)
-![Platforms](https://img.shields.io/badge/platform-armv7%20%7C%20arm64-success)
+[![Docker Pulls](https://img.shields.io/docker/pulls/blackxdog/openvpn-client-ros?logo=docker&label=docker%20pulls)](https://hub.docker.com/r/blackxdog/openvpn-client-ros)
+[![Docker Image Size](https://img.shields.io/docker/image-size/blackxdog/openvpn-client-ros/latest?logo=docker&label=image%20size)](https://hub.docker.com/r/blackxdog/openvpn-client-ros)
+[![Last commit](https://img.shields.io/github/last-commit/blackxd0g/openvpn-client-ros?logo=github&label=last%20commit)](https://github.com/blackxd0g/openvpn-client-ros/commits/main)
+![Platforms](https://img.shields.io/badge/arch-armv7%20%7C%20arm64-success)
 ![RouterOS](https://img.shields.io/badge/RouterOS-7.23%20%7C%207.24-blue)
+[![Boosty](https://img.shields.io/badge/Boosty-support-f15f2c?logo=boosty&logoColor=white)](https://boosty.to/blackxdog/donate)
 
 ## ✨ Features
 
@@ -40,7 +43,16 @@
 
 Confirm the change using the physical button or a power cycle within the RouterOS time window.
 
-2. Download [`deploy-routeros.rsc`](deploy-routeros.rsc) and set the credentials at the top:
+2. Download the installer directly from the MikroTik terminal:
+
+```routeros
+:local url "https://raw.githubusercontent.com/blackxd0g/openvpn-client-ros/main/deploy-routeros.rsc"
+:local dst "deploy-routeros.rsc"
+/tool fetch url=$url mode=https dst-path=$dst
+:put ("Downloaded " . $dst . ". Review its credentials and network settings before import.")
+```
+
+Open `deploy-routeros.rsc` in **Files** and set the credentials at the top:
 
 ```routeros
 :local vpnUsername "VPN_LOGIN"
@@ -76,6 +88,10 @@ A successful synchronization ends with:
 ```
 
 ## 🚀 Automated deployment
+
+[![Installer](https://img.shields.io/badge/RouterOS-download%20installer-0A84FF?logo=mikrotik&logoColor=white)](deploy-routeros.rsc)
+[![Docker Hub](https://img.shields.io/badge/Docker%20Hub-open%20image-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/blackxdog/openvpn-client-ros)
+[![Compatibility](https://img.shields.io/badge/docs-profile%20compatibility-7B61FF)](PROFILE-COMPATIBILITY.md)
 
 [`deploy-routeros.rsc`](deploy-routeros.rsc) is safe to run repeatedly. It:
 
